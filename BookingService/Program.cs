@@ -1,8 +1,9 @@
 using BookingService.Configuration;
+using BookingService.Catalog.Async.Api.Contracts.Events;
+using BookingService.Catalog.Async.Api.Contracts.Requests;
 using BookingService.Exceptions;
 using BookingService.Infrastructure.Data;
 using BookingService.Infrastructure.Messaging;
-using BookingService.Infrastructure.Messaging.Contracts;
 using BookingService.Mappers;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;

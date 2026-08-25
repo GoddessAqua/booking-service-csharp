@@ -1,4 +1,4 @@
-using BookingService.Infrastructure.Messaging.Contracts;
+using BookingService.Catalog.Async.Api.Contracts.Events;
 using Rebus.Handlers;
 
 namespace BookingService.Infrastructure.Messaging;
