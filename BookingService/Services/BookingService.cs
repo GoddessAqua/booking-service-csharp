@@ -86,8 +86,8 @@ public class BookingService
         var booking = await _repository.FindByIdAsync(id)
             ?? throw new BusinessException($"Бронирование с указанным id: '{id}' не найдено.");
 
-        var currentDate = DateOnly.FromDateTime(_dateTimeProvider.UtcNow().UtcDateTime);
-        booking.Cancel(currentDate);
+        var now = _dateTimeProvider.UtcNow();
+        booking.Cancel(now);
 
         await _repository.SaveAsync(booking);
 
@@ -170,8 +170,8 @@ public class BookingService
         _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Отменяем...",
             booking.Id, booking.Status);
 
-        var currentDate = DateOnly.FromDateTime(_dateTimeProvider.UtcNow().UtcDateTime);
-        booking.Cancel(currentDate);
+        var now = _dateTimeProvider.UtcNow();
+        booking.Cancel(now);
         await _repository.SaveAsync(booking);
 
         _logger.LogInformation("Бронирование успешно отменено: id={Id}, новый статус={Status}",
@@ -179,7 +179,36 @@ public class BookingService
     }
 
     // TODO: Task 01 — откат отмены бронирования (компенсирующая транзакция)
-    public Task HandleCancellationError(Guid requestId) => throw new NotImplementedException();
+    public async Task HandleCancellationError(Guid requestId)
+    {
+        _logger.LogInformation("Получено событие CancelBookingJobByRequestIdRequest: requestId={RequestId}", requestId);
+
+        var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
+        if (booking is null)
+        {
+            _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
+            return;
+        }
+
+        _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Производим откат отмены бронирования...",
+            booking.Id, booking.Status);
+        
+        if (booking.Status != BookingStatus.CancellationPending)                                                                                                                                                                      
+        {                                                                                                                                                                                                                             
+            _logger.LogInformation(                                                                                                                                                                                                   
+                "Откат отмены пропущен: bookingId={BookingId}, текущий статус={Status}",                                                                                                                                              
+                booking.Id,                                                                                                                                                                                                           
+                booking.Status);                                                                                                                                                                                                      
+                                                                                                                                                                                                                                    
+            return;                                                                                                                                                                                                                   
+        }
+
+        booking.RollbackCancellation();
+        await _repository.SaveAsync(booking);
+
+        _logger.LogInformation("Откат отмены бронирования произведён успешно: id={Id}, статус={Status}",
+            booking.Id, booking.Status);
+    }
 
     /// <summary>Устаревший метод-заглушка — используйте HandleCancellationError</summary>
     public Task HandleError(Guid requestId) => HandleCancellationError(requestId);

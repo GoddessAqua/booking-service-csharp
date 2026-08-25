@@ -1,10 +1,15 @@
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Microsoft.EntityFrameworkCore.Infrastructure;                                                                                                                                                                               
+using Microsoft.EntityFrameworkCore.Migrations;                                                                                                                                                                                   
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata; 
 
 #nullable disable
 
 namespace BookingService.Infrastructure.Data.Migrations;
 
+[DbContext(typeof(BookingDbContext))]                                                                                                                                                                                             
+[Migration("20240101000000_InitialCreate")] 
 /// <inheritdoc />
 public partial class InitialCreate : Migration
 {

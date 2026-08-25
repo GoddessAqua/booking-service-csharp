@@ -23,12 +23,15 @@ public class Booking
     public uint Version { get; private set; }
 
     // Parameterless constructor required by EF Core
-    private Booking() { }
+    private Booking()
+    {
+    }
 
     /// <summary>
     /// Factory method для создания нового бронирования с валидацией бизнес-правил
     /// </summary>
-    public static Booking Create(long userId, long resourceId, DateOnly bookedFrom, DateOnly bookedTo, DateTimeOffset createdAt)
+    public static Booking Create(long userId, long resourceId, DateOnly bookedFrom, DateOnly bookedTo,
+        DateTimeOffset createdAt)
     {
         if (userId <= 0)
             throw new BusinessException($"Некорректный идентификатор пользователя {userId}");
@@ -72,7 +75,8 @@ public class Booking
     public void Confirm()
     {
         if (Status != BookingStatus.AwaitConfirmation)
-            throw new BusinessException($"Статус заявки некорректен, заявка должна быть в статусе {BookingStatus.AwaitConfirmation}");
+            throw new BusinessException(
+                $"Статус заявки некорректен, заявка должна быть в статусе {BookingStatus.AwaitConfirmation}");
 
         Status = BookingStatus.Confirmed;
     }
@@ -81,8 +85,10 @@ public class Booking
     /// Отменить бронирование с учётом бизнес-правил.
     /// TODO: Task 01 — добавить обработку статуса Confirmed (→ CancellationPending)
     /// </summary>
-    public void Cancel(DateOnly currentDate)
+    public void Cancel(DateTimeOffset cancelledAt)
     {
+        var currentDate = DateOnly.FromDateTime(cancelledAt.UtcDateTime);
+
         switch (Status)
         {
             case BookingStatus.AwaitConfirmation:
@@ -91,16 +97,47 @@ public class Booking
                 Status = BookingStatus.Cancelled;
                 break;
 
+            case BookingStatus.Confirmed:
+            {
+                if (currentDate >= BookedFrom)
+                {
+                    throw new BusinessException("Нельзя отменить уже начавшееся бронирование");
+                }
+
+                Status = BookingStatus.CancellationPending;
+                CancellationRequestedAt = cancelledAt;
+                break;
+            }
+
             case BookingStatus.None:
             case BookingStatus.Cancelled:
+            case BookingStatus.CancellationPending:
             default:
                 throw new BusinessException("Некорректный статус для отмены");
         }
     }
 
     // TODO: Task 01 — завершить отмену: CancellationPending → Cancelled
-    public void CompleteCancellation() => throw new NotImplementedException();
+    public void CompleteCancellation()
+    {
+        if (Status != BookingStatus.CancellationPending)
+        {
+            throw new BusinessException($"Завершение отмены допустимо только из статуса {BookingStatus.CancellationPending}");
+        }
+        
+        Status = BookingStatus.Cancelled;
+        CancellationRequestedAt = null; 
+    }
 
     // TODO: Task 01 — откатить отмену: CancellationPending → Confirmed (при ошибке DLQ)
-    public void RollbackCancellation() => throw new NotImplementedException();
+    public void RollbackCancellation()
+    {
+        if (Status != BookingStatus.CancellationPending)
+        {
+            throw new BusinessException($"Откат отмены допустим только из статуса {BookingStatus.CancellationPending}");
+        }
+        
+        Status = BookingStatus.Confirmed;
+        CancellationRequestedAt = null; 
+    }
 }
