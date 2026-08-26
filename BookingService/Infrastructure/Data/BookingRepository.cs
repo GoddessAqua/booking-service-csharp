@@ -70,7 +70,6 @@ public class BookingRepository
     public async Task<StatisticsResponse> GetStatisticsAsync()
     {
         var totalBookings = await _context.Bookings
-            .AsQueryable()
             .CountAsync(); 
         
         var statisticByStatus = await _context.Bookings
@@ -80,7 +79,6 @@ public class BookingRepository
                 Status = s.Key,
                 Count = s.Count(),
             })
-            .AsQueryable()
             .ToListAsync();
         
         var topResources = await _context.Bookings
@@ -92,7 +90,6 @@ public class BookingRepository
             })
             .OrderByDescending(o => o.BookingCount)
             .Take(5)
-            .AsQueryable()
             .ToListAsync();
         
         var statistics = new StatisticsResponse
