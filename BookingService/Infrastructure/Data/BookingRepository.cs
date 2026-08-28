@@ -69,7 +69,7 @@ public class BookingRepository
     public Task ReloadAsync(Booking booking)
         => _context.Entry(booking).ReloadAsync();
 
-    // TODO: Task 02 — реализовать агрегирующий SQL-запрос статистики
+    /// <summary>Получить количество бронирований по статусам и наиболее популярным ресурсам.</summary>
     public async Task<StatisticsResponse> GetStatisticsAsync(CancellationToken ct = default)
     {
         var totalBookings = await _context.Bookings
@@ -105,7 +105,7 @@ public class BookingRepository
         return statistics;
     }
 
-    // TODO: Task 03 — найти бронирования, застрявшие в CancellationPending
+    /// <summary>Найти отмены, оставшиеся в CancellationPending дольше заданного срока.</summary>
     public async Task<List<Booking>> FindStuckCancellationsAsync(DateTimeOffset cancellationRequestedBefore, CancellationToken ct = default)
     {
         return await _context.Bookings

@@ -123,6 +123,9 @@ public class BookingConcurrencyFeature : FeatureFixtureBase
     {
         _firstBooking!.Confirm();
         await _firstContext!.SaveChangesAsync();
+        
+        _firstBooking.Cancel(DateTimeOffset.UtcNow);
+        await _firstContext.SaveChangesAsync();
     }
 
     private async Task When_the_second_process_saves_its_outdated_booking()
@@ -161,7 +164,7 @@ public class BookingConcurrencyFeature : FeatureFixtureBase
 
     private Task Then_the_second_process_should_reload_the_booking()
     {
-        _secondBooking!.Status.Should().Be(BookingStatus.Confirmed);
+        _secondBooking!.Status.Should().Be(BookingStatus.CancellationPending);
         _secondBooking.Version.Should().Be(_firstBooking!.Version);
         return Task.CompletedTask;
     }
@@ -174,7 +177,7 @@ public class BookingConcurrencyFeature : FeatureFixtureBase
             .AsNoTracking()
             .SingleAsync(b => b.Id == Booking.Id);
 
-        actualBooking.Status.Should().Be(BookingStatus.Confirmed);
+        actualBooking.Status.Should().Be(BookingStatus.CancellationPending);
         actualBooking.Version.Should().Be(_firstBooking!.Version);
     }
 

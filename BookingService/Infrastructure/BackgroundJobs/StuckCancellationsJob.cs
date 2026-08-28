@@ -9,9 +9,8 @@ namespace BookingService.Infrastructure.BackgroundJobs;
 /// Фоновая задача для повторной отправки команд отмены
 /// по бронированиям, зависшим в статусе CancellationPending.
 /// </summary>
-public sealed class StuckCancellationsJob( //Синглтон
+public sealed class StuckCancellationsJob(
     IServiceScopeFactory scopeFactory,
-    ICurrentDateTimeProvider dateTimeProvider,
     ILogger<StuckCancellationsJob> logger)
     : BackgroundService
 {
@@ -33,13 +32,17 @@ public sealed class StuckCancellationsJob( //Синглтон
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            logger.LogInformation(                                                                                                                                                                                                        
-                "Окончание работы джобы {JobName}",                                                                                                                                                                                       
+            logger.LogDebug(
+                "Получен сигнал остановки джобы {JobName}",
                 nameof(StuckCancellationsJob));
         }
-        
-        logger.LogInformation("Окончание работы джобы {JobName}", nameof(StuckCancellationsJob));
-    }
+        finally
+        {
+            logger.LogInformation(
+                "Окончание работы джобы {JobName}", 
+                nameof(StuckCancellationsJob));
+        }
+    } 
 
     private async Task TryProcessAsync(CancellationToken ct)
     {
@@ -66,6 +69,7 @@ public sealed class StuckCancellationsJob( //Синглтон
         //scoped-сервисы внутри синглтона через scopeFactory
         var bookingRepo = scope.ServiceProvider.GetRequiredService<BookingRepository>();
         var publisher = scope.ServiceProvider.GetRequiredService<BookingEventPublisher>();
+        var dateTimeProvider = scope.ServiceProvider.GetRequiredService<ICurrentDateTimeProvider>();
 
         var cancellationRequestedBefore = dateTimeProvider.UtcNow() - CancellationTimeout;
         var filteredBookings = await bookingRepo.FindStuckCancellationsAsync(cancellationRequestedBefore, ct);

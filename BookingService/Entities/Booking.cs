@@ -16,10 +16,10 @@ public class Booking
     public DateTimeOffset CreatedAt { get; private set; }
     public Guid? CatalogRequestId { get; private set; }
 
-    // TODO: Task 01 — время, когда была запрошена отмена подтверждённого бронирования
+    // Время начала отмены подтверждённого бронирования.
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
 
-    // TODO: Task 03 — версия для оптимистичной блокировки (EF Core xmin)
+    // Версия строки PostgreSQL для оптимистичной блокировки через xmin.
     public uint Version { get; private set; }
 
     // Parameterless constructor required by EF Core
@@ -83,7 +83,7 @@ public class Booking
 
     /// <summary>
     /// Отменить бронирование с учётом бизнес-правил.
-    /// TODO: Task 01 — добавить обработку статуса Confirmed (→ CancellationPending)
+    /// Подтверждённое бронирование переводится в CancellationPending.
     /// </summary>
     public void Cancel(DateTimeOffset cancelledAt)
     {
@@ -117,7 +117,7 @@ public class Booking
         }
     }
 
-    // TODO: Task 01 — завершить отмену: CancellationPending → Cancelled
+    /// <summary>Завершить отмену: CancellationPending → Cancelled.</summary>
     public void CompleteCancellation()
     {
         if (Status != BookingStatus.CancellationPending)
@@ -129,7 +129,7 @@ public class Booking
         CancellationRequestedAt = null; 
     }
 
-    // TODO: Task 01 — откатить отмену: CancellationPending → Confirmed (при ошибке DLQ)
+    /// <summary>Откатить отмену: CancellationPending → Confirmed.</summary>
     public void RollbackCancellation()
     {
         if (Status != BookingStatus.CancellationPending)

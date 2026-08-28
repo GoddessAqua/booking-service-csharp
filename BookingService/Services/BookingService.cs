@@ -143,10 +143,18 @@ public class BookingService
             return;
         }
 
-        if (booking.Status == BookingStatus.CancellationPending)
+        if (booking.Status == BookingStatus.Confirmed)
+        {
+            _logger.LogInformation(
+                "Бронирование id={Id} уже подтверждено. Событие проигнорировано.",
+                booking.Id);
+            return;
+        }
+
+        if (booking.Status != BookingStatus.AwaitConfirmation)
         {
             _logger.LogWarning(
-                "Подтверждение бронирования пропущено: id={Id}, requestId={RequestId}, статус={Status}.",
+                "Подтверждение бронирования пропущено: id={Id}, requestId={RequestId}, текущий статус={Status}.",
                 booking.Id,
                 requestId,
                 booking.Status);
@@ -155,37 +163,43 @@ public class BookingService
 
         _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Подтверждаем...",
             booking.Id, booking.Status);
+        
+        var retryCount = 0;
+        const int maxRetryCount = 3;
 
-        booking.Confirm();
-
-        try
+        while (true)
         {
-            await _repository.SaveAsync(booking);
-        }
-        catch (DbUpdateConcurrencyException exception)
-        {
-            _logger.LogWarning(
-                exception,
-                "Конкурентное изменение при подтверждении бронирования: id={Id}, requestId={RequestId}. " +
-                "Перезагружаем сущность и повторяем операцию.",
-                booking.Id,
-                requestId);
-
-            await _repository.ReloadAsync(booking);
-
-            if (booking.Status != BookingStatus.AwaitConfirmation)
+            try
             {
+                booking.Confirm();
+                await _repository.SaveAsync(booking);
+                break;
+            }
+            catch (DbUpdateConcurrencyException exception) when (retryCount < maxRetryCount)
+            {
+                retryCount++;
+                
                 _logger.LogWarning(
-                    "Повторное подтверждение бронирования пропущено после перезагрузки: " +
-                    "id={Id}, requestId={RequestId}, статус={Status}.",
+                    exception,
+                    "Конкурентное изменение при подтверждении бронирования: id={Id}, requestId={RequestId}. " +
+                    "Перезагружаем сущность и повторяем операцию.",
                     booking.Id,
-                    requestId,
+                    requestId);
+
+                await _repository.ReloadAsync(booking);
+
+                if (booking.Status != BookingStatus.CancellationPending)
+                {
+                    continue;
+                }
+                
+                _logger.LogInformation(
+                    "После перезагрузки бронирование id={Id} имеет статус {Status}. " +
+                    "Повторное подтверждение не требуется.",
+                    booking.Id,
                     booking.Status);
                 return;
             }
-
-            booking.Confirm();
-            await _repository.SaveAsync(booking);
         }
 
         _logger.LogInformation("Бронирование успешно подтверждено: id={Id}, новый статус={Status}",
@@ -219,7 +233,7 @@ public class BookingService
             booking.Id, booking.Status);
     }
 
-    // TODO: Task 01 — откат отмены бронирования (компенсирующая транзакция)
+    /// <summary>Откатить отмену бронирования при ошибке Catalog Service.</summary>
     public async Task HandleCancellationError(Guid requestId)
     {
         _logger.LogInformation("Получено событие CancelBookingJobByRequestIdRequest: requestId={RequestId}", requestId);
@@ -254,7 +268,7 @@ public class BookingService
     /// <summary>Устаревший метод-заглушка — используйте HandleCancellationError</summary>
     public Task HandleError(Guid requestId) => HandleCancellationError(requestId);
 
-    // TODO: Task 02 — реализовать агрегирующий запрос статистики бронирований
+    /// <summary>Получить агрегированную статистику бронирований.</summary>
     public async Task<StatisticsResponse> GetStatistics(CancellationToken ct = default)
         => await _repository.GetStatisticsAsync(ct);
 
