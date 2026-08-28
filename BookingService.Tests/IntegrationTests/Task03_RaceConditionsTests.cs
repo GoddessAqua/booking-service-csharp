@@ -162,3 +162,4 @@ public class Task03_RaceConditionsTests : IntegrationTestBase
                      "для эффективной выборки зависших отмен фоновым job'ом");
     }
 }
+
