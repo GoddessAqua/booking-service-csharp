@@ -173,7 +173,7 @@ public class BookingService
 
             await _repository.ReloadAsync(booking);
 
-            if (booking.Status == BookingStatus.CancellationPending)
+            if (booking.Status != BookingStatus.AwaitConfirmation)
             {
                 _logger.LogWarning(
                     "Повторное подтверждение бронирования пропущено после перезагрузки: " +
@@ -255,8 +255,8 @@ public class BookingService
     public Task HandleError(Guid requestId) => HandleCancellationError(requestId);
 
     // TODO: Task 02 — реализовать агрегирующий запрос статистики бронирований
-    public async Task<StatisticsResponse> GetStatistics() 
-        => await _repository.GetStatisticsAsync();
+    public async Task<StatisticsResponse> GetStatistics(CancellationToken ct = default)
+        => await _repository.GetStatisticsAsync(ct);
 
     // TODO: Task 04 — возвращать историю изменений статусов для указанного бронирования
     public Task<List<Entities.BookingStatusHistory>> GetBookingHistory(long bookingId)

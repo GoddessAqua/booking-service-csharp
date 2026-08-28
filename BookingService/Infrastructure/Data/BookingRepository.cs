@@ -70,10 +70,10 @@ public class BookingRepository
         => _context.Entry(booking).ReloadAsync();
 
     // TODO: Task 02 — реализовать агрегирующий SQL-запрос статистики
-    public async Task<StatisticsResponse> GetStatisticsAsync()
+    public async Task<StatisticsResponse> GetStatisticsAsync(CancellationToken ct = default)
     {
         var totalBookings = await _context.Bookings
-            .CountAsync(); 
+            .CountAsync(ct); 
         
         var statisticByStatus = await _context.Bookings
             .GroupBy(g => g.Status)
@@ -82,7 +82,7 @@ public class BookingRepository
                 Status = s.Key,
                 Count = s.Count(),
             })
-            .ToListAsync();
+            .ToListAsync(ct);
         
         var topResources = await _context.Bookings
             .GroupBy(g => g.ResourceId)
@@ -93,7 +93,7 @@ public class BookingRepository
             })
             .OrderByDescending(o => o.BookingCount)
             .Take(5)
-            .ToListAsync();
+            .ToListAsync(ct);
         
         var statistics = new StatisticsResponse
         {

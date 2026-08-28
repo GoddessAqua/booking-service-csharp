@@ -9,11 +9,16 @@ public abstract class FeatureFixtureBase : IntegrationTestBase
 {
     private readonly List<BookingDbContext> _scenarioContexts = [];
 
-	    protected Booking Booking { get; set; } = null!;
+    protected Booking Booking { get; set; } = null!;
 
     protected BookingDbContext CreateScenarioDbContext()
     {
         var context = CreateDbContext();
+        return RegisterScenarioDbContext(context);
+    }
+
+    protected BookingDbContext RegisterScenarioDbContext(BookingDbContext context)
+    {
         _scenarioContexts.Add(context);
         return context;
     }
