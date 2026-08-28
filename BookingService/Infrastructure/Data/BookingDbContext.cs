@@ -71,6 +71,10 @@ public class BookingDbContext : DbContext
 
             entity.HasIndex(b => b.ResourceId)
                 .HasDatabaseName("idx_bookings_resource_id");
+            
+            entity.HasIndex(b => b.CancellationRequestedAt)
+                .HasDatabaseName("idx_bookings_cancellation_pending")
+                .HasFilter("status = 4");
         });
     }
 }

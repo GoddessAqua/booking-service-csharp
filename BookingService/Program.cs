@@ -2,6 +2,7 @@ using BookingService.Configuration;
 using BookingService.Catalog.Async.Api.Contracts.Events;
 using BookingService.Catalog.Async.Api.Contracts.Requests;
 using BookingService.Exceptions;
+using BookingService.Infrastructure.BackgroundJobs;
 using BookingService.Infrastructure.Data;
 using BookingService.Infrastructure.Messaging;
 using BookingService.Mappers;
@@ -67,6 +68,8 @@ builder.Services.AddRebus(
 
 builder.Services.AddRebusHandler<BookingEventsHandler>();
 builder.Services.AddRebusHandler<CancelBookingErrorsHandler>();
+
+builder.Services.AddHostedService<StuckCancellationsJob>();
 
 // ---- App ----
 var app = builder.Build();
