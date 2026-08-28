@@ -6,6 +6,7 @@ using BookingService.Exceptions;
 using BookingService.Infrastructure.Data;
 using BookingService.Infrastructure.Messaging;
 using BookingService.Infrastructure.Notifications;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace BookingService.Services;
@@ -142,12 +143,50 @@ public class BookingService
             return;
         }
 
+        if (booking.Status == BookingStatus.CancellationPending)
+        {
+            _logger.LogWarning(
+                "Подтверждение бронирования пропущено: id={Id}, requestId={RequestId}, статус={Status}.",
+                booking.Id,
+                requestId,
+                booking.Status);
+            return;
+        }
+
         _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Подтверждаем...",
             booking.Id, booking.Status);
 
         booking.Confirm();
-        
-        await _repository.SaveAsync(booking);
+
+        try
+        {
+            await _repository.SaveAsync(booking);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Конкурентное изменение при подтверждении бронирования: id={Id}, requestId={RequestId}. " +
+                "Перезагружаем сущность и повторяем операцию.",
+                booking.Id,
+                requestId);
+
+            await _repository.ReloadAsync(booking);
+
+            if (booking.Status == BookingStatus.CancellationPending)
+            {
+                _logger.LogWarning(
+                    "Повторное подтверждение бронирования пропущено после перезагрузки: " +
+                    "id={Id}, requestId={RequestId}, статус={Status}.",
+                    booking.Id,
+                    requestId,
+                    booking.Status);
+                return;
+            }
+
+            booking.Confirm();
+            await _repository.SaveAsync(booking);
+        }
 
         _logger.LogInformation("Бронирование успешно подтверждено: id={Id}, новый статус={Status}",
             booking.Id, booking.Status);

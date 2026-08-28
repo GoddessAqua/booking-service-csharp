@@ -55,10 +55,13 @@ public class BookingDbContext : DbContext
             
             entity.Property(b => b.CancellationRequestedAt)                                                                                                                                                                                   
                 .HasColumnName("cancellation_requested_at")                                                                                                                                                                                   
-                .HasColumnType("timestamp with time zone");                                                                                                                                                                                 
-                                                                                                                                                                                                                                    
-            entity.Property(b => b.Version)                                                                                                                                                                                                  
-                .HasColumnName("version");
+                .HasColumnType("timestamp with time zone");
+
+            entity.Property(b => b.Version)
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
 
             entity.HasIndex(b => b.Status)
                 .HasDatabaseName("idx_bookings_status");

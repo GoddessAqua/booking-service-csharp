@@ -1,9 +1,9 @@
 using BookingService.Configuration;
 using BookingService.Infrastructure.Data;
 using BookingService.Infrastructure.Messaging;
+using LightBDD.XUnit2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using NSubstitute;
 using Rebus.Bus;
 using Testcontainers.PostgreSql;
 
@@ -21,7 +21,7 @@ namespace BookingService.Tests.Fixtures;
 ///       public async Task MyTest() { ... }
 ///   }
 /// </summary>
-public abstract class IntegrationTestBase : IAsyncLifetime
+public abstract class IntegrationTestBase : FeatureFixture, IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
         .WithDatabase("booking_test")
@@ -60,7 +60,16 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             NullLogger<Services.BookingService>.Instance);
     }
 
-    public async Task DisposeAsync()
+    protected BookingDbContext CreateDbContext()
+    {
+        var options = new DbContextOptionsBuilder<BookingDbContext>()
+            .UseNpgsql(_postgres.GetConnectionString())
+            .Options;
+
+        return new BookingDbContext(options);
+    }
+
+    public virtual async Task DisposeAsync()
     {
         await Context.DisposeAsync();
         await _postgres.DisposeAsync();

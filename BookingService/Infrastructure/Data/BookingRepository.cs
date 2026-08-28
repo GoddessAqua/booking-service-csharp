@@ -66,6 +66,9 @@ public class BookingRepository
         await _context.SaveChangesAsync();
     }
 
+    public Task ReloadAsync(Booking booking)
+        => _context.Entry(booking).ReloadAsync();
+
     // TODO: Task 02 — реализовать агрегирующий SQL-запрос статистики
     public async Task<StatisticsResponse> GetStatisticsAsync()
     {
