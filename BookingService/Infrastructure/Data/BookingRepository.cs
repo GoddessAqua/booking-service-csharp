@@ -76,22 +76,22 @@ public class BookingRepository
             .CountAsync(ct); 
         
         var statisticByStatus = await _context.Bookings
-            .GroupBy(g => g.Status)
-            .Select(s => new StatusCount
+            .GroupBy(b => b.Status)
+            .Select(grp => new StatusCount
             {
-                Status = s.Key,
-                Count = s.Count(),
+                Status = grp.Key,
+                Count = grp.Count(),
             })
             .ToListAsync(ct);
         
         var topResources = await _context.Bookings
-            .GroupBy(g => g.ResourceId)
-            .Select(s => new ResourceCount
+            .GroupBy(b => b.ResourceId)
+            .Select(grp => new ResourceCount
             {
-                ResourceId = s.Key,
-                BookingCount = s.Count(),
+                ResourceId = grp.Key,
+                BookingCount = grp.Count(),
             })
-            .OrderByDescending(o => o.BookingCount)
+            .OrderByDescending(resource => resource.BookingCount)
             .Take(5)
             .ToListAsync(ct);
         
