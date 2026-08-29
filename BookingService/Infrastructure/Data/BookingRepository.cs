@@ -116,4 +116,21 @@ public class BookingRepository
                    b.CancellationRequestedAt <= cancellationRequestedBefore)
             .ToListAsync(ct);
     }
+    
+    // Получение истории бронирования
+    public async Task<List<BookingStatusHistoryResponse>> GetBookingHistoryAsync(
+        long bookingId,
+        CancellationToken ct)
+    {
+        return await _context.BookingStatusHistories
+            .AsNoTracking()
+            .Where(b => b.BookingId == bookingId)
+            .OrderBy(x => x.ChangedAt)
+            .Select(x => new BookingStatusHistoryResponse(
+                x.BookingId,
+                x.StatusFrom,
+                x.StatusTo,
+                x.ChangedAt))
+            .ToListAsync(ct);
+    }
 }

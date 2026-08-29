@@ -3,78 +3,44 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookingService.Infrastructure.Data;
 
-public class BookingDbContext : DbContext
+public class BookingDbContext(DbContextOptions<BookingDbContext> options) : DbContext(options)
 {
     public DbSet<Booking> Bookings => Set<Booking>();
-
-    public BookingDbContext(DbContextOptions<BookingDbContext> options) : base(options) { }
+    public DbSet<BookingStatusHistory> BookingStatusHistories => Set<BookingStatusHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Booking>(entity =>
-        {
-            entity.ToTable("bookings");
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
+        base.OnModelCreating(modelBuilder);
+    }
 
-            entity.HasKey(b => b.Id);
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ChangeTracker.DetectChanges();
 
-            entity.Property(b => b.Id)
-                .HasColumnName("id")
-                .UseIdentityByDefaultColumn();
+        var result = ChangeTracker
+            .Entries<Booking>()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified)
+            .Select(e =>
+            {
+                var status = e.Property(p => p.Status);
 
-            entity.Property(b => b.Status)
-                .HasColumnName("status")
-                .HasConversion<int>()
-                .IsRequired();
+                return e.State switch
+                {
+                    EntityState.Added
+                        => BookingStatusHistory.Create(e.Entity, null, status.CurrentValue),
 
-            entity.Property(b => b.UserId)
-                .HasColumnName("user_id")
-                .IsRequired();
+                    EntityState.Modified when status.CurrentValue != status.OriginalValue && status.IsModified
+                        => BookingStatusHistory.Create(e.Entity.Id, status.OriginalValue, status.CurrentValue),
 
-            entity.Property(b => b.ResourceId)
-                .HasColumnName("resource_id")
-                .IsRequired();
+                    _ => null
+                };
+            })
+            .OfType<BookingStatusHistory>()
+            .ToList();
+        
+        Set<BookingStatusHistory>().AddRange(result);
 
-            entity.Property(b => b.BookedFrom)
-                .HasColumnName("booked_from")
-                .HasColumnType("date")
-                .IsRequired();
-
-            entity.Property(b => b.BookedTo)
-                .HasColumnName("booked_to")
-                .HasColumnType("date")
-                .IsRequired();
-
-            entity.Property(b => b.CreatedAt)
-                .HasColumnName("created_at")
-                .HasColumnType("timestamp with time zone")
-                .IsRequired();
-
-            entity.Property(b => b.CatalogRequestId)
-                .HasColumnName("catalog_request_id")
-                .HasColumnType("uuid");
-            
-            entity.Property(b => b.CancellationRequestedAt)                                                                                                                                                                                   
-                .HasColumnName("cancellation_requested_at")                                                                                                                                                                                   
-                .HasColumnType("timestamp with time zone");
-
-            entity.Property(b => b.Version)
-                .HasColumnName("xmin")
-                .HasColumnType("xid")
-                .ValueGeneratedOnAddOrUpdate()
-                .IsConcurrencyToken();
-
-            entity.HasIndex(b => b.Status)
-                .HasDatabaseName("idx_bookings_status");
-
-            entity.HasIndex(b => b.UserId)
-                .HasDatabaseName("idx_bookings_user_id");
-
-            entity.HasIndex(b => b.ResourceId)
-                .HasDatabaseName("idx_bookings_resource_id");
-            
-            entity.HasIndex(b => b.CancellationRequestedAt)
-                .HasDatabaseName("idx_bookings_cancellation_pending")
-                .HasFilter("status = 4");
-        });
+        return await base.SaveChangesAsync(cancellationToken);
     }
 }
