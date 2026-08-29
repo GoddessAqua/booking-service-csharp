@@ -272,7 +272,24 @@ public class BookingService
     public async Task<StatisticsResponse> GetStatistics(CancellationToken ct = default)
         => await _repository.GetStatisticsAsync(ct);
 
-    // TODO: Task 04 — возвращать историю изменений статусов для указанного бронирования
-    public Task<List<Entities.BookingStatusHistory>> GetBookingHistory(long bookingId)
-        => throw new NotImplementedException();
+    /// <summary>
+    /// Возвращение истории изменений статусов для указанного бронирования
+    /// </summary>
+    /// <param name="bookingId"></param>
+    /// <param name="ct"></param>
+    /// <returns></returns>
+    public async Task<List<BookingStatusHistoryResponse>> GetBookingHistory(
+        long bookingId,
+        CancellationToken ct = default)
+    {
+        var history = await _repository.GetBookingHistoryAsync(bookingId, ct);
+
+        return history
+            .Select(x => new BookingStatusHistoryResponse(
+                x.BookingId,
+                x.StatusFrom,
+                x.StatusTo,
+                x.ChangedAt))
+            .ToList();
+    }
 }

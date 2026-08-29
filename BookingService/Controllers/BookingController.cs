@@ -71,4 +71,12 @@ public class BookingController : ControllerBase
     [ProducesResponseType<StatisticsResponse>(StatusCodes.Status200OK)]
     public async Task<StatisticsResponse> GetBookingsStatistics(CancellationToken ct = default)
         => await _bookingService.GetStatistics(ct);
+    
+    /// <summary>Получить историю изменений статусов бронирования</summary>
+    [HttpGet("{id:long}/history")]
+    [ProducesResponseType<List<BookingStatusHistoryResponse>>(StatusCodes.Status200OK)]
+    public async Task<List<BookingStatusHistoryResponse>> GetBookingHistory(
+        [FromRoute] long id,
+        CancellationToken ct = default)
+        => await _bookingService.GetBookingHistory(id, ct);
 }
