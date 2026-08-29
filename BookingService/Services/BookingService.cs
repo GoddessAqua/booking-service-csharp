@@ -6,6 +6,7 @@ using BookingService.Exceptions;
 using BookingService.Infrastructure.Data;
 using BookingService.Infrastructure.Messaging;
 using BookingService.Infrastructure.Notifications;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace BookingService.Services;
@@ -142,12 +143,64 @@ public class BookingService
             return;
         }
 
+        if (booking.Status == BookingStatus.Confirmed)
+        {
+            _logger.LogInformation(
+                "Бронирование id={Id} уже подтверждено. Событие проигнорировано.",
+                booking.Id);
+            return;
+        }
+
+        if (booking.Status != BookingStatus.AwaitConfirmation)
+        {
+            _logger.LogWarning(
+                "Подтверждение бронирования пропущено: id={Id}, requestId={RequestId}, текущий статус={Status}.",
+                booking.Id,
+                requestId,
+                booking.Status);
+            return;
+        }
+
         _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Подтверждаем...",
             booking.Id, booking.Status);
-
-        booking.Confirm();
         
-        await _repository.SaveAsync(booking);
+        var retryCount = 0;
+        const int maxRetryCount = 3;
+
+        while (true)
+        {
+            try
+            {
+                booking.Confirm();
+                await _repository.SaveAsync(booking);
+                break;
+            }
+            catch (DbUpdateConcurrencyException exception) when (retryCount < maxRetryCount)
+            {
+                retryCount++;
+                
+                _logger.LogWarning(
+                    exception,
+                    "Конкурентное изменение при подтверждении бронирования: id={Id}, requestId={RequestId}. " +
+                    "Перезагружаем сущность и повторяем операцию.",
+                    booking.Id,
+                    requestId);
+
+                await _repository.ReloadAsync(booking);
+
+                if (booking.Status != BookingStatus.CancellationPending)
+                {
+                    continue;
+                }
+                
+                _logger.LogInformation(
+                    "После перезагрузки бронирование id={Id} имеет статус {Status}. " +
+                    "Повторное подтверждение не требуется.",
+                    booking.Id,
+                    booking.Status);
+                return;
+            }
+        }
 
         _logger.LogInformation("Бронирование успешно подтверждено: id={Id}, новый статус={Status}",
             booking.Id, booking.Status);
@@ -180,7 +233,7 @@ public class BookingService
             booking.Id, booking.Status);
     }
 
-    // TODO: Task 01 — откат отмены бронирования (компенсирующая транзакция)
+    /// <summary>Откатить отмену бронирования при ошибке Catalog Service.</summary>
     public async Task HandleCancellationError(Guid requestId)
     {
         _logger.LogInformation("Получено событие CancelBookingJobByRequestIdRequest: requestId={RequestId}", requestId);
@@ -215,9 +268,9 @@ public class BookingService
     /// <summary>Устаревший метод-заглушка — используйте HandleCancellationError</summary>
     public Task HandleError(Guid requestId) => HandleCancellationError(requestId);
 
-    // TODO: Task 02 — реализовать агрегирующий запрос статистики бронирований
-    public async Task<StatisticsResponse> GetStatistics() 
-        => await _repository.GetStatisticsAsync();
+    /// <summary>Получить агрегированную статистику бронирований.</summary>
+    public async Task<StatisticsResponse> GetStatistics(CancellationToken ct = default)
+        => await _repository.GetStatisticsAsync(ct);
 
     // TODO: Task 04 — возвращать историю изменений статусов для указанного бронирования
     public Task<List<Entities.BookingStatusHistory>> GetBookingHistory(long bookingId)

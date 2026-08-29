@@ -66,31 +66,34 @@ public class BookingRepository
         await _context.SaveChangesAsync();
     }
 
-    // TODO: Task 02 — реализовать агрегирующий SQL-запрос статистики
-    public async Task<StatisticsResponse> GetStatisticsAsync()
+    public Task ReloadAsync(Booking booking)
+        => _context.Entry(booking).ReloadAsync();
+
+    /// <summary>Получить количество бронирований по статусам и наиболее популярным ресурсам.</summary>
+    public async Task<StatisticsResponse> GetStatisticsAsync(CancellationToken ct = default)
     {
         var totalBookings = await _context.Bookings
-            .CountAsync(); 
+            .CountAsync(ct); 
         
         var statisticByStatus = await _context.Bookings
-            .GroupBy(g => g.Status)
-            .Select(s => new StatusCount
+            .GroupBy(b => b.Status)
+            .Select(grp => new StatusCount
             {
-                Status = s.Key,
-                Count = s.Count(),
+                Status = grp.Key,
+                Count = grp.Count(),
             })
-            .ToListAsync();
+            .ToListAsync(ct);
         
         var topResources = await _context.Bookings
-            .GroupBy(g => g.ResourceId)
-            .Select(s => new ResourceCount
+            .GroupBy(b => b.ResourceId)
+            .Select(grp => new ResourceCount
             {
-                ResourceId = s.Key,
-                BookingCount = s.Count(),
+                ResourceId = grp.Key,
+                BookingCount = grp.Count(),
             })
-            .OrderByDescending(o => o.BookingCount)
+            .OrderByDescending(resource => resource.BookingCount)
             .Take(5)
-            .ToListAsync();
+            .ToListAsync(ct);
         
         var statistics = new StatisticsResponse
         {
@@ -102,7 +105,15 @@ public class BookingRepository
         return statistics;
     }
 
-    // TODO: Task 03 — найти бронирования, застрявшие в CancellationPending
-    public Task<List<Booking>> FindStuckCancellationsAsync(DateTimeOffset cancellationRequestedBefore)
-        => throw new NotImplementedException();
+    /// <summary>Найти отмены, оставшиеся в CancellationPending дольше заданного срока.</summary>
+    public async Task<List<Booking>> FindStuckCancellationsAsync(DateTimeOffset cancellationRequestedBefore, CancellationToken ct = default)
+    {
+        return await _context.Bookings
+            .AsNoTracking()
+            .Where(b 
+                => b.Status == BookingStatus.CancellationPending && 
+                   b.CancellationRequestedAt != null &&
+                   b.CancellationRequestedAt <= cancellationRequestedBefore)
+            .ToListAsync(ct);
+    }
 }

@@ -10,13 +10,6 @@ namespace BookingService.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<uint>(
-                name: "version",                                                                                                                                                                                                          
-                table: "bookings",                                                                                                                                                                                                        
-                type: "bigint",                                                                                                                                                                                                           
-                nullable: false,                                                                                                                                                                                                          
-                defaultValue: 0u);
-
             migrationBuilder.AddColumn<DateTimeOffset>(
                 name: "cancellation_requested_at",                                                                                                                                                                                        
                 table: "bookings",                                                                                                                                                                                                        
@@ -30,10 +23,6 @@ namespace BookingService.Infrastructure.Data.Migrations
             migrationBuilder.DropColumn(                                                                                                                                                                                                  
                 name: "cancellation_requested_at",                                                                                                                                                                                        
                 table: "bookings");                                                                                                                                                                                                       
-                                                                                                                                                                                                                                    
-            migrationBuilder.DropColumn(                                                                                                                                                                                                  
-                name: "version",                                                                                                                                                                                                          
-                table: "bookings");
         }
     }
 }

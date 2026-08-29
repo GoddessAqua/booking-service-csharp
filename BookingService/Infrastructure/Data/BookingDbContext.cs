@@ -55,10 +55,13 @@ public class BookingDbContext : DbContext
             
             entity.Property(b => b.CancellationRequestedAt)                                                                                                                                                                                   
                 .HasColumnName("cancellation_requested_at")                                                                                                                                                                                   
-                .HasColumnType("timestamp with time zone");                                                                                                                                                                                 
-                                                                                                                                                                                                                                    
-            entity.Property(b => b.Version)                                                                                                                                                                                                  
-                .HasColumnName("version");
+                .HasColumnType("timestamp with time zone");
+
+            entity.Property(b => b.Version)
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
 
             entity.HasIndex(b => b.Status)
                 .HasDatabaseName("idx_bookings_status");
@@ -68,6 +71,10 @@ public class BookingDbContext : DbContext
 
             entity.HasIndex(b => b.ResourceId)
                 .HasDatabaseName("idx_bookings_resource_id");
+            
+            entity.HasIndex(b => b.CancellationRequestedAt)
+                .HasDatabaseName("idx_bookings_cancellation_pending")
+                .HasFilter("status = 4");
         });
     }
 }

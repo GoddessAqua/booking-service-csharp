@@ -69,6 +69,6 @@ public class BookingController : ControllerBase
     /// <summary>Получить статистику бронирований</summary>
     [HttpGet("statistics")]
     [ProducesResponseType<StatisticsResponse>(StatusCodes.Status200OK)]
-    public async Task<StatisticsResponse?> GetBookingsStatistics() 
-        => await _bookingService.GetStatistics();
+    public async Task<StatisticsResponse> GetBookingsStatistics(CancellationToken ct = default)
+        => await _bookingService.GetStatistics(ct);
 }
