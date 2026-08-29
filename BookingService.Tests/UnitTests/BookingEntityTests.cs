@@ -11,10 +11,10 @@ namespace BookingService.Tests.UnitTests;
 /// </summary>
 public class BookingEntityTests
 {
-    private static Booking CreateConfirmedBooking(DateOnly bookedFrom, DateOnly bookedTo)
+    private static Booking CreateConfirmedBooking(DateOnly bookedFrom, DateOnly bookedTo, DateTimeOffset? createdAt = null)
     {
-        var createdAt = DateTimeOffset.UtcNow.AddDays(-1); // вчера
-        var booking = Booking.Create(1, 1, bookedFrom, bookedTo, createdAt);
+        createdAt ??= DateTimeOffset.UtcNow.AddDays(-1);
+        var booking = Booking.Create(1, 1, bookedFrom, bookedTo, createdAt.Value);
         booking.SetCatalogRequestId(Guid.NewGuid());
         booking.Confirm();
         return booking;
@@ -31,7 +31,7 @@ public class BookingEntityTests
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(5));
         var booking = Booking.Create(1, 1, from, from.AddDays(3), createdAt);
 
-        booking.Cancel(DateOnly.FromDateTime(DateTime.UtcNow));
+        booking.Cancel(DateTimeOffset.UtcNow);
 
         booking.Status.Should().Be(BookingStatus.Cancelled);
     }
@@ -42,10 +42,9 @@ public class BookingEntityTests
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)); // вчера
         var to = from.AddDays(3);
         var createdAt = DateTimeOffset.UtcNow.AddDays(-10);
-        var booking = CreateConfirmedBooking(from, to);
-
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var act = () => booking.Cancel(today);
+        var booking = CreateConfirmedBooking(from, to, createdAt);
+        
+        var act = () => booking.Cancel(DateTimeOffset.UtcNow);
 
         act.Should().Throw<BusinessException>()
             .WithMessage("*начавшееся*");
@@ -63,7 +62,7 @@ public class BookingEntityTests
         var booking = CreateConfirmedBooking(from, to);
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        booking.Cancel(today);
+        booking.Cancel(DateTimeOffset.UtcNow);
 
         // После задачи 01: должен быть CancellationPending, а не Cancelled
         booking.Status.Should().Be(BookingStatus.CancellationPending,
@@ -76,7 +75,7 @@ public class BookingEntityTests
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10));
         var booking = CreateConfirmedBooking(from, from.AddDays(3));
 
-        booking.Cancel(DateOnly.FromDateTime(DateTime.UtcNow));
+        booking.Cancel(DateTimeOffset.UtcNow);
 
         booking.CancellationRequestedAt.Should().NotBeNull(
             because: "При переходе в CancellationPending должна фиксироваться метка времени");
@@ -88,7 +87,7 @@ public class BookingEntityTests
     {
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10));
         var booking = CreateConfirmedBooking(from, from.AddDays(3));
-        booking.Cancel(DateOnly.FromDateTime(DateTime.UtcNow));
+        booking.Cancel(DateTimeOffset.UtcNow);
         booking.Status.Should().Be(BookingStatus.CancellationPending);
 
         booking.RollbackCancellation();
@@ -104,7 +103,7 @@ public class BookingEntityTests
     {
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10));
         var booking = CreateConfirmedBooking(from, from.AddDays(3));
-        booking.Cancel(DateOnly.FromDateTime(DateTime.UtcNow));
+        booking.Cancel(DateTimeOffset.UtcNow);
 
         booking.CompleteCancellation();
 
@@ -145,10 +144,10 @@ public class BookingEntityTests
     {
         var from = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(10));
         var booking = CreateConfirmedBooking(from, from.AddDays(3));
-        booking.Cancel(DateOnly.FromDateTime(DateTime.UtcNow));
+        booking.Cancel(DateTimeOffset.UtcNow);
         booking.Status.Should().Be(BookingStatus.CancellationPending);
 
-        var act = () => booking.Cancel(DateOnly.FromDateTime(DateTime.UtcNow));
+        var act = () => booking.Cancel(DateTimeOffset.UtcNow);
 
         act.Should().Throw<BusinessException>(
             because: "Нельзя отменить бронирование, уже находящееся в процессе отмены");
