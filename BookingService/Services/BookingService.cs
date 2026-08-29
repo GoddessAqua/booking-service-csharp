@@ -1,12 +1,11 @@
 using BookingService.Configuration;
+using BookingService.Catalog.Async.Api.Contracts.Requests;
 using BookingService.Dto.Response;
 using BookingService.Entities;
 using BookingService.Exceptions;
 using BookingService.Infrastructure.Data;
 using BookingService.Infrastructure.Messaging;
-using BookingService.Infrastructure.Messaging.Contracts;
 using BookingService.Infrastructure.Notifications;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace BookingService.Services;
@@ -147,6 +146,8 @@ public class BookingService
             booking.Id, booking.Status);
 
         booking.Confirm();
+        
+        await _repository.SaveAsync(booking);
 
         _logger.LogInformation("Бронирование успешно подтверждено: id={Id}, новый статус={Status}",
             booking.Id, booking.Status);
@@ -172,6 +173,7 @@ public class BookingService
 
         var now = _dateTimeProvider.UtcNow();
         booking.Cancel(now);
+        
         await _repository.SaveAsync(booking);
 
         _logger.LogInformation("Бронирование успешно отменено: id={Id}, новый статус={Status}",
@@ -214,7 +216,8 @@ public class BookingService
     public Task HandleError(Guid requestId) => HandleCancellationError(requestId);
 
     // TODO: Task 02 — реализовать агрегирующий запрос статистики бронирований
-    public Task<StatisticsResponse> GetStatistics() => throw new NotImplementedException();
+    public async Task<StatisticsResponse> GetStatistics() 
+        => await _repository.GetStatisticsAsync();
 
     // TODO: Task 04 — возвращать историю изменений статусов для указанного бронирования
     public Task<List<Entities.BookingStatusHistory>> GetBookingHistory(long bookingId)

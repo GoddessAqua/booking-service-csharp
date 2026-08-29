@@ -2,7 +2,6 @@ using BookingService.Dto.Request;
 using BookingService.Dto.Response;
 using BookingService.Entities;
 using BookingService.Mappers;
-using BookingService.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookingService.Controllers;
@@ -65,5 +64,11 @@ public class BookingController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task Cancel([FromRoute] long id)
         => await _bookingService.CancelBooking(id);
-
+    
+    
+    /// <summary>Получить статистику бронирований</summary>
+    [HttpGet("statistics")]
+    [ProducesResponseType<StatisticsResponse>(StatusCodes.Status200OK)]
+    public async Task<StatisticsResponse?> GetBookingsStatistics() 
+        => await _bookingService.GetStatistics();
 }
