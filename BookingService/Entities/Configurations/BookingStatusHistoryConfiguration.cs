@@ -31,6 +31,7 @@ public class BookingStatusHistoryConfiguration : IEntityTypeConfiguration<Bookin
 
         builder.Property(b => b.ChangedAt)
             .HasColumnName("changed_at")
+            .HasColumnType("timestamp with time zone")
             .IsRequired();
         
         builder.HasOne(b => b.Booking)

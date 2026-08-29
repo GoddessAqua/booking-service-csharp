@@ -281,5 +281,15 @@ public class BookingService
     public async Task<List<BookingStatusHistoryResponse>> GetBookingHistory(
         long bookingId,
         CancellationToken ct = default)
-        => await _repository.GetBookingHistoryAsync(bookingId, ct);
+    {
+        var history = await _repository.GetBookingHistoryAsync(bookingId, ct);
+
+        return history
+            .Select(x => new BookingStatusHistoryResponse(
+                x.BookingId,
+                x.StatusFrom,
+                x.StatusTo,
+                x.ChangedAt))
+            .ToList();
+    }
 }

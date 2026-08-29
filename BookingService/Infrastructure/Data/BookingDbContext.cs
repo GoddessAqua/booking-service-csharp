@@ -1,9 +1,12 @@
+using BookingService.Configuration;
 using BookingService.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookingService.Infrastructure.Data;
 
-public class BookingDbContext(DbContextOptions<BookingDbContext> options) : DbContext(options)
+public class BookingDbContext(
+    DbContextOptions<BookingDbContext> options,
+    ICurrentDateTimeProvider dateTimeProvider) : DbContext(options)
 {
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<BookingStatusHistory> BookingStatusHistories => Set<BookingStatusHistory>();
@@ -14,9 +17,31 @@ public class BookingDbContext(DbContextOptions<BookingDbContext> options) : DbCo
         base.OnModelCreating(modelBuilder);
     }
 
+    public override int SaveChanges()
+    {
+        CollectStatusHistory();
+        return base.SaveChanges();
+    }
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        CollectStatusHistory();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void CollectStatusHistory()
+    {
         ChangeTracker.DetectChanges();
+
+        var pendingHistoryEntries = ChangeTracker
+            .Entries<BookingStatusHistory>()
+            .Where(e => e.State == EntityState.Added)
+            .ToList();
+
+        foreach (var entry in pendingHistoryEntries)
+        {
+            entry.State = EntityState.Detached;
+        }
 
         var result = ChangeTracker
             .Entries<Booking>()
@@ -28,10 +53,14 @@ public class BookingDbContext(DbContextOptions<BookingDbContext> options) : DbCo
                 return e.State switch
                 {
                     EntityState.Added
-                        => BookingStatusHistory.Create(e.Entity, null, status.CurrentValue),
+                        => BookingStatusHistory.Create(e.Entity, null, status.CurrentValue, dateTimeProvider.UtcNow()),
 
                     EntityState.Modified when status.CurrentValue != status.OriginalValue && status.IsModified
-                        => BookingStatusHistory.Create(e.Entity.Id, status.OriginalValue, status.CurrentValue),
+                        => BookingStatusHistory.Create(
+                            e.Entity,
+                            status.OriginalValue,
+                            status.CurrentValue,
+                            dateTimeProvider.UtcNow()),
 
                     _ => null
                 };
@@ -40,7 +69,5 @@ public class BookingDbContext(DbContextOptions<BookingDbContext> options) : DbCo
             .ToList();
         
         Set<BookingStatusHistory>().AddRange(result);
-
-        return await base.SaveChangesAsync(cancellationToken);
     }
 }

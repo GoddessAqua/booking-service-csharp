@@ -117,8 +117,11 @@ public class BookingRepository
             .ToListAsync(ct);
     }
     
-    // Получение истории бронирования
-    public async Task<List<BookingStatusHistoryResponse>> GetBookingHistoryAsync(
+    /// <summary>
+    /// Получить историю изменений статусов бронирования
+    /// </summary>
+    /// <returns></returns>
+    public async Task<List<BookingStatusHistory>> GetBookingHistoryAsync(
         long bookingId,
         CancellationToken ct)
     {
@@ -126,11 +129,7 @@ public class BookingRepository
             .AsNoTracking()
             .Where(b => b.BookingId == bookingId)
             .OrderBy(x => x.ChangedAt)
-            .Select(x => new BookingStatusHistoryResponse(
-                x.BookingId,
-                x.StatusFrom,
-                x.StatusTo,
-                x.ChangedAt))
+            .ThenBy(x => x.Id)
             .ToListAsync(ct);
     }
 }

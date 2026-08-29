@@ -41,7 +41,7 @@ public abstract class IntegrationTestBase : FeatureFixture, IAsyncLifetime
             .UseNpgsql(_postgres.GetConnectionString())
             .Options;
 
-        Context = new BookingDbContext(options);
+        Context = new BookingDbContext(options, new CurrentDateTimeProvider());
 
         // Применяем все миграции (включая те, что добавлены в задачах)
         await Context.Database.MigrateAsync();
@@ -66,7 +66,7 @@ public abstract class IntegrationTestBase : FeatureFixture, IAsyncLifetime
             .UseNpgsql(_postgres.GetConnectionString())
             .Options;
 
-        return new BookingDbContext(options);
+        return new BookingDbContext(options, new CurrentDateTimeProvider());
     }
 
     public virtual async Task DisposeAsync()
