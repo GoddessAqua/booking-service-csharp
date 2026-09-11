@@ -27,7 +27,7 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     public async Task Migration_ProcessedEventsTable_Exists()
     {
         var tableExists = await Context.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*)::int FROM information_schema.tables " +
+            "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.tables " +
             "WHERE table_schema = 'public' AND table_name = 'processed_events'")
             .SingleAsync();
 
@@ -43,7 +43,7 @@ public class Task05_IdempotencyTests : IntegrationTestBase
         foreach (var column in requiredColumns)
         {
             var exists = await Context.Database.SqlQueryRaw<int>(
-                "SELECT COUNT(*)::int FROM information_schema.columns " +
+                "SELECT COUNT(*)::int AS \"Value\" FROM information_schema.columns " +
                 "WHERE table_name = 'processed_events' AND column_name = {0}",
                 column)
                 .SingleAsync();
@@ -58,16 +58,17 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task HandleBookingJobConfirmed_CalledTwiceWithSameRequestId_DoesNotThrow()
+    public async Task HandleBookingJobConfirmed_CalledTwiceWithSameEventId_DoesNotThrow()
     {
         // Arrange
         var (_, catalogRequestId) = await CreateBookingAsync();
+        var eventId = Guid.NewGuid();
 
         // Первый вызов — нормальная обработка
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
 
         // Act: повторная доставка (at-least-once) — не должна бросать исключение
-        var act = async () => await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        var act = async () => await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
 
         // Assert
         await act.Should().NotThrowAsync(
@@ -76,14 +77,16 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task HandleBookingJobConfirmed_CalledTwiceWithSameRequestId_BookingRemainsConfirmed()
+    public async Task HandleBookingJobConfirmed_CalledTwiceWithSameEventId_BookingRemainsConfirmed()
     {
         // Arrange
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        var eventId = Guid.NewGuid();
+        
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
 
         // Act: дубликат события
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
 
         // Assert: статус должен остаться Confirmed, а не откатиться
         var booking = await Context.Bookings.FindAsync(bookingId);
@@ -96,16 +99,17 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task HandleBookingJobDenied_CalledTwiceWithSameRequestId_DoesNotThrow()
+    public async Task HandleBookingJobDenied_CalledTwiceWithSameEventId_DoesNotThrow()
     {
         // Arrange
         var (_, catalogRequestId) = await CreateBookingAsync();
+        var eventId = Guid.NewGuid();
 
         // Первый вызов — нормальная обработка
-        await BookingService.HandleBookingJobDenied(catalogRequestId);
+        await BookingService.HandleBookingJobDenied(catalogRequestId, eventId);
 
         // Act: дубликат события
-        var act = async () => await BookingService.HandleBookingJobDenied(catalogRequestId);
+        var act = async () => await BookingService.HandleBookingJobDenied(catalogRequestId, eventId);
 
         // Assert
         await act.Should().NotThrowAsync(
@@ -113,19 +117,67 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task HandleBookingJobDenied_CalledTwiceWithSameRequestId_BookingRemainsCancelled()
+    public async Task HandleBookingJobDenied_CalledTwiceWithSameEventId_BookingRemainsCancelled()
     {
         // Arrange
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
-        await BookingService.HandleBookingJobDenied(catalogRequestId);
+        var eventId = Guid.NewGuid();
+        
+        await BookingService.HandleBookingJobDenied(catalogRequestId, eventId);
 
         // Act: дубликат события
-        await BookingService.HandleBookingJobDenied(catalogRequestId);
+        await BookingService.HandleBookingJobDenied(catalogRequestId, eventId);
 
         // Assert
         var booking = await Context.Bookings.FindAsync(bookingId);
         booking!.Status.Should().Be(BookingStatus.Cancelled,
             because: "Повторная обработка не должна изменять статус уже отменённого бронирования");
+    }
+
+    // -----------------------------------------------------------------------
+    // Идемпотентность HandleCancellationError
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandleCancellationError_CalledTwiceWithSameEventId_DoesNotThrow()
+    {
+        // Arrange: доводим бронирование до CancellationPending.
+        var (bookingId, catalogRequestId) = await CreateBookingAsync();
+        await ConfirmBookingAsync(catalogRequestId);
+        await BookingService.CancelBooking(bookingId);
+
+        var eventId = Guid.NewGuid();
+        
+        // Первый вызов — нормальная обработка
+        await BookingService.HandleCancellationError(catalogRequestId, eventId);
+
+        // Act: дубликат события
+        var act = async () =>
+            await BookingService.HandleCancellationError(catalogRequestId, eventId);
+
+        // Assert
+        await act.Should().NotThrowAsync(
+            because: "повторная доставка CancellationError должна быть пропущена как дубликат");
+    }
+
+    [Fact]
+    public async Task HandleCancellationError_CalledTwiceWithSameEventId_BookingRemainsConfirmed()
+    {
+        // Arrange: доводим бронирование до CancellationPending.
+        var (bookingId, catalogRequestId) = await CreateBookingAsync();
+        await ConfirmBookingAsync(catalogRequestId);
+        await BookingService.CancelBooking(bookingId);
+
+        var eventId = Guid.NewGuid();
+
+        // Act: первичная обработка + дубликат
+        await BookingService.HandleCancellationError(catalogRequestId, eventId);
+        await BookingService.HandleCancellationError(catalogRequestId, eventId);
+
+        // Assert
+        var booking = await Context.Bookings.FindAsync(bookingId);
+        booking!.Status.Should().Be(BookingStatus.Confirmed,
+            because: "повторная обработка CancellationError не должна повторно изменять бронирование");
     }
 
     // -----------------------------------------------------------------------
@@ -137,14 +189,15 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     {
         // Arrange
         var (_, catalogRequestId) = await CreateBookingAsync();
+        var eventId = Guid.NewGuid();
 
         // Act
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
 
         // Assert: идентификатор события должен быть записан
         var recordedEventCount = await Context.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*)::int FROM processed_events WHERE event_id = {0}",
-            catalogRequestId)
+            "SELECT COUNT(*)::int AS \"Value\" FROM processed_events WHERE event_id = {0}",
+            eventId)
             .SingleAsync();
 
         recordedEventCount.Should().BeGreaterThanOrEqualTo(1,
@@ -157,15 +210,16 @@ public class Task05_IdempotencyTests : IntegrationTestBase
     {
         // Arrange
         var (_, catalogRequestId) = await CreateBookingAsync();
+        var eventId = Guid.NewGuid();
 
         // Act: первичная обработка + дубликат
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, eventId);
 
         // Assert: не должно быть дублирующих записей
         var recordedEventCount = await Context.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*)::int FROM processed_events WHERE event_id = {0}",
-            catalogRequestId)
+            "SELECT COUNT(*)::int AS \"Value\" FROM processed_events WHERE event_id = {0}",
+            eventId)
             .SingleAsync();
 
         recordedEventCount.Should().Be(1,

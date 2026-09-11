@@ -139,7 +139,7 @@ public class Task06_DomainEventsTests : IntegrationTestBase
         BusMock.ClearReceivedCalls();
 
         // Act
-        await BookingService.HandleCancellationError(catalogRequestId);
+        await BookingService.HandleCancellationError(catalogRequestId, Guid.NewGuid());
 
         // Assert
         var events = GetStatusChangedEventArgs();
@@ -158,7 +158,7 @@ public class Task06_DomainEventsTests : IntegrationTestBase
         var unknownRequestId = Guid.NewGuid();
 
         // Act
-        await BookingService.HandleBookingJobConfirmed(unknownRequestId);
+        await BookingService.HandleBookingJobConfirmed(unknownRequestId, Guid.NewGuid());
 
         // Assert: событие не публикуется для несуществующего бронирования
         var events = GetStatusChangedEventArgs();
@@ -178,7 +178,7 @@ public class Task06_DomainEventsTests : IntegrationTestBase
         BusMock.ClearReceivedCalls();
 
         // Act: запоздалое подтверждение — должно быть проигнорировано
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: статус не изменился → событие тоже не публикуется
         var events = GetStatusChangedEventArgs();

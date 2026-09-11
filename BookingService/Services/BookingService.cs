@@ -8,6 +8,7 @@ using BookingService.Infrastructure.Messaging;
 using BookingService.Infrastructure.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Npgsql;
 
 namespace BookingService.Services;
 
@@ -132,141 +133,232 @@ public class BookingService
     /// Обработать событие подтверждения booking job от Catalog Service.
     /// Переводит бронирование в статус Confirmed.
     /// </summary>
-    public async Task HandleBookingJobConfirmed(Guid requestId)
+    public async Task HandleBookingJobConfirmed(Guid requestId, Guid eventId)
     {
-        _logger.LogInformation("Получено событие BookingJobConfirmed: requestId={RequestId}", requestId);
-
-        var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
-        if (booking is null)
-        {
-            _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
-            return;
-        }
-
-        if (booking.Status == BookingStatus.Confirmed)
-        {
-            _logger.LogInformation(
-                "Бронирование id={Id} уже подтверждено. Событие проигнорировано.",
-                booking.Id);
-            return;
-        }
-
-        if (booking.Status != BookingStatus.AwaitConfirmation)
-        {
-            _logger.LogWarning(
-                "Подтверждение бронирования пропущено: id={Id}, requestId={RequestId}, текущий статус={Status}.",
-                booking.Id,
-                requestId,
-                booking.Status);
-            return;
-        }
-
-        _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Подтверждаем...",
-            booking.Id, booking.Status);
+        _logger.LogInformation("Получено событие BookingJobConfirmed: requestId={RequestId} eventId={EventId}", requestId, eventId);
         
-        var retryCount = 0;
-        const int maxRetryCount = 3;
-
-        while (true)
+        if (await _repository.IsEventProcessedAsync(eventId))
         {
-            try
-            {
-                booking.Confirm();
-                await _repository.SaveAsync(booking);
-                break;
-            }
-            catch (DbUpdateConcurrencyException exception) when (retryCount < maxRetryCount)
-            {
-                retryCount++;
-                
-                _logger.LogWarning(
-                    exception,
-                    "Конкурентное изменение при подтверждении бронирования: id={Id}, requestId={RequestId}. " +
-                    "Перезагружаем сущность и повторяем операцию.",
-                    booking.Id,
-                    requestId);
+            _logger.LogWarning("Событие eventId={EventId} уже обработано. Дубликат пропущен.", eventId);
+            return;
+        }
 
-                await _repository.ReloadAsync(booking);
+        await using var transaction = await _repository.BeginTransactionAsync();
 
-                if (booking.Status != BookingStatus.CancellationPending)
-                {
-                    continue;
-                }
-                
-                _logger.LogInformation(
-                    "После перезагрузки бронирование id={Id} имеет статус {Status}. " +
-                    "Повторное подтверждение не требуется.",
-                    booking.Id,
-                    booking.Status);
+        var newProcessedEvent = ProcessedEvent.Create(eventId, _dateTimeProvider.UtcNow());
+
+        try
+        {
+            await _repository.AddProcessedEventAsync(newProcessedEvent);
+            await _repository.SaveChangesAsync();
+            
+            var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
+            if (booking is null)
+            {
+                _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
+                await transaction.CommitAsync();
                 return;
             }
-        }
+            
+            if (booking.Status == BookingStatus.Confirmed)
+            {
+                _logger.LogInformation("Бронирование id={Id} уже подтверждено. Событие проигнорировано.", booking.Id);
+                await transaction.CommitAsync();
+                return;
+            }
+            
+            if (booking.Status != BookingStatus.AwaitConfirmation)
+            {
+                _logger.LogWarning(
+                    "Подтверждение бронирования пропущено: id={Id}, requestId={RequestId}, текущий статус={Status}.",
+                    booking.Id,
+                    requestId,
+                    booking.Status);
+                await transaction.CommitAsync();
+                return;
+            }
+            
+            _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Подтверждаем...",
+                booking.Id, booking.Status);
+            
+            var retryCount = 0;
+            const int maxRetryCount = 3;
 
-        _logger.LogInformation("Бронирование успешно подтверждено: id={Id}, новый статус={Status}",
-            booking.Id, booking.Status);
+            while (true)
+            {
+                try
+                {
+                    booking.Confirm();
+                    await _repository.SaveAsync(booking);
+                    break;
+                }
+                catch (DbUpdateConcurrencyException exception) when (retryCount < maxRetryCount)
+                {
+                    retryCount++;
+                
+                    _logger.LogWarning(
+                        exception,
+                        "Конкурентное изменение при подтверждении бронирования: id={Id}, requestId={RequestId}. " +
+                        "Перезагружаем сущность и повторяем операцию.",
+                        booking.Id,
+                        requestId);
+
+                    await _repository.ReloadAsync(booking);
+
+                    if (booking.Status == BookingStatus.AwaitConfirmation)                                                                                                                                                                            
+                    {                                                                                                                                                                                                                                 
+                        continue;                                                                                                                                                                                                                     
+                    }
+                
+                    _logger.LogInformation(
+                        "После перезагрузки бронирование id={Id} имеет статус {Status}. " +
+                        "Повторное подтверждение не требуется.",
+                        booking.Id,
+                        booking.Status);
+                    
+                    await transaction.CommitAsync();
+                    return;
+                }
+            }
+            
+            await transaction.CommitAsync();
+            
+            _logger.LogInformation("Бронирование успешно подтверждено: id={Id}, новый статус={Status}",
+                booking.Id, booking.Status);
+        }
+        catch (DbUpdateException ex) when (IsProcessedEventUniqueViolation(ex))
+        {
+            await transaction.RollbackAsync();
+            
+            _repository.DetachProcessedEvent(newProcessedEvent);
+            
+            _logger.LogWarning("Событие eventId={EventId} уже обработано другим экземпляром. Дубликат пропущен.", eventId);
+        }
+    }
+
+    private static bool IsProcessedEventUniqueViolation(DbUpdateException exception)
+    {
+        return exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: "PK_processed_events",
+        };
     }
 
     /// <summary>
     /// Обработать событие отклонения booking job от Catalog Service.
     /// Отменяет бронирование.
     /// </summary>
-    public async Task HandleBookingJobDenied(Guid requestId)
+    public async Task HandleBookingJobDenied(Guid requestId, Guid eventId)
     {
-        _logger.LogInformation("Получено событие BookingJobDenied: requestId={RequestId}", requestId);
-
-        var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
-        if (booking is null)
+        _logger.LogInformation("Получено событие BookingJobDenied: requestId={RequestId} eventId={EventId}", requestId, eventId);
+        
+        if (await _repository.IsEventProcessedAsync(eventId))
         {
-            _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
+            _logger.LogWarning("Событие eventId={EventId} уже обработано. Дубликат пропущен.", eventId);
             return;
         }
 
-        _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Отменяем...",
-            booking.Id, booking.Status);
+        await using var transaction = await _repository.BeginTransactionAsync();
 
-        var now = _dateTimeProvider.UtcNow();
-        booking.Cancel(now);
+        var newProcessedEvent = ProcessedEvent.Create(eventId, _dateTimeProvider.UtcNow());
+
+        try
+        {
+            await _repository.AddProcessedEventAsync(newProcessedEvent);
+            await _repository.SaveChangesAsync();
+            
+            var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
+            if (booking is null)
+            {
+                _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
+                await transaction.CommitAsync();
+                return;
+            }
+
+            _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Отменяем...",
+                booking.Id, booking.Status);
+
+            var now = _dateTimeProvider.UtcNow();
+            booking.Cancel(now);
         
-        await _repository.SaveAsync(booking);
-
-        _logger.LogInformation("Бронирование успешно отменено: id={Id}, новый статус={Status}",
-            booking.Id, booking.Status);
+            await _repository.SaveAsync(booking);
+            
+            await transaction.CommitAsync();
+            
+            _logger.LogInformation("Бронирование успешно отменено: id={Id}, новый статус={Status}",
+                booking.Id, booking.Status);
+        }
+        catch (DbUpdateException ex) when (IsProcessedEventUniqueViolation(ex))
+        {
+            await transaction.RollbackAsync();
+            
+            _repository.DetachProcessedEvent(newProcessedEvent);
+            
+            _logger.LogWarning("Событие eventId={EventId} уже обработано другим экземпляром. Дубликат пропущен.", eventId);
+        }
     }
 
     /// <summary>Откатить отмену бронирования при ошибке Catalog Service.</summary>
-    public async Task HandleCancellationError(Guid requestId)
+    public async Task HandleCancellationError(Guid requestId, Guid eventId)
     {
-        _logger.LogInformation("Получено событие CancelBookingJobByRequestIdRequest: requestId={RequestId}", requestId);
+        _logger.LogInformation("Получено событие CancelBookingJobByRequestIdRequest: requestId={RequestId} eventId={EventId}", requestId, eventId);
 
-        var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
-        if (booking is null)
+        if (await _repository.IsEventProcessedAsync(eventId))
         {
-            _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
+            _logger.LogWarning("Событие eventId={EventId} уже обработано. Дубликат пропущен.", eventId);
             return;
         }
-
-        _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Производим откат отмены бронирования...",
-            booking.Id, booking.Status);
         
-        if (booking.Status != BookingStatus.CancellationPending)                                                                                                                                                                      
-        {                                                                                                                                                                                                                             
-            _logger.LogInformation(                                                                                                                                                                                                   
-                "Откат отмены пропущен: bookingId={BookingId}, текущий статус={Status}",                                                                                                                                              
-                booking.Id,                                                                                                                                                                                                           
-                booking.Status);                                                                                                                                                                                                      
-                                                                                                                                                                                                                                    
-            return;                                                                                                                                                                                                                   
+        await using var transaction = await _repository.BeginTransactionAsync();
+        var newProcessedEvent = ProcessedEvent.Create(eventId, _dateTimeProvider.UtcNow());
+
+        try
+        { 
+            await _repository.AddProcessedEventAsync(newProcessedEvent);
+            await _repository.SaveChangesAsync();
+            
+            var booking = await _repository.FindByCatalogRequestIdAsync(requestId);
+            if (booking is null)
+            {
+                _logger.LogWarning("Бронирование не найдено по requestId: {RequestId}. Событие проигнорировано.", requestId);
+                await transaction.CommitAsync();
+                return;
+            }
+
+            _logger.LogInformation("Найдено бронирование: id={Id}, статус={Status}. Производим откат отмены бронирования...",
+                booking.Id, booking.Status);
+            
+            if (booking.Status != BookingStatus.CancellationPending)                                                                                                                                                                      
+            {                                                                                                                                                                                                                             
+                _logger.LogInformation(                                                                                                                                                                                                   
+                    "Откат отмены пропущен: bookingId={BookingId}, текущий статус={Status}",                                                                                                                                              
+                    booking.Id,                                                                                                                                                                                                           
+                    booking.Status);          
+                
+                await transaction.CommitAsync();
+                                                                                                                                                                                                                                        
+                return;                                                                                                                                                                                                                  
+            }
+
+            booking.RollbackCancellation();
+            
+            await _repository.SaveAsync(booking);
+            
+            await transaction.CommitAsync();
+
+            _logger.LogInformation("Откат отмены бронирования произведён успешно: id={Id}, статус={Status}",
+                booking.Id, booking.Status); 
         }
-
-        booking.RollbackCancellation();
-        await _repository.SaveAsync(booking);
-
-        _logger.LogInformation("Откат отмены бронирования произведён успешно: id={Id}, статус={Status}",
-            booking.Id, booking.Status);
+        catch (DbUpdateException ex) when (IsProcessedEventUniqueViolation(ex))
+        {
+            await transaction.RollbackAsync();
+            
+            _repository.DetachProcessedEvent(newProcessedEvent);
+            
+            _logger.LogWarning("Событие eventId={EventId} уже обработано другим экземпляром. Дубликат пропущен.", eventId);
+        }
     }
-
-    /// <summary>Устаревший метод-заглушка — используйте HandleCancellationError</summary>
-    public Task HandleError(Guid requestId) => HandleCancellationError(requestId);
 
     /// <summary>Получить агрегированную статистику бронирований.</summary>
     public async Task<StatisticsResponse> GetStatistics(CancellationToken ct = default)

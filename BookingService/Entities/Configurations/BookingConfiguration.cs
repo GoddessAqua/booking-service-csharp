@@ -7,7 +7,7 @@ internal sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
 {
     public void Configure(EntityTypeBuilder<Booking> builder)
     {
-        builder.ToTable("bookings");
+        builder.ToTable(DbTableNames.Bookings);
 
         builder.HasKey(b => b.Id);
 

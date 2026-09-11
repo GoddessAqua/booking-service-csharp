@@ -54,7 +54,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
 
         // Act
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: уведомление отправлено ровно раз
         await notificationMock.Received(1)
@@ -70,7 +70,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
 
         // Act
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: в уведомлении передан правильный новый статус
         await notificationMock.Received(1)
@@ -88,7 +88,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var notificationMock = CreateNotificationMock();
         var service = CreateServiceWithNotifications(notificationMock);
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
         notificationMock.ClearReceivedCalls();
 
         // Act
@@ -106,12 +106,12 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var notificationMock = CreateNotificationMock();
         var service = CreateServiceWithNotifications(notificationMock);
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
         await service.CancelBooking(bookingId);
         notificationMock.ClearReceivedCalls();
 
         // Act
-        await service.HandleCancellationError(catalogRequestId);
+        await service.HandleCancellationError(catalogRequestId, Guid.NewGuid());
 
         // Assert
         await notificationMock.Received(1)
@@ -134,7 +134,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
 
         // Act
-        var act = async () => await service.HandleBookingJobConfirmed(catalogRequestId);
+        var act = async () => await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: основной сценарий не должен падать из-за проблем с уведомлением
         await act.Should().NotThrowAsync(
@@ -154,7 +154,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
 
         // Act: уведомление падает, но операция всё равно должна завершиться
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: статус бронирования изменился, несмотря на ошибку уведомления
         var booking = await Context.Bookings.FindAsync(bookingId);
@@ -169,7 +169,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var notificationMock = CreateNotificationMock();
         var service = CreateServiceWithNotifications(notificationMock);
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         notificationMock.NotifyStatusChangedAsync(default, default, default)
             .ThrowsAsyncForAnyArgs(new HttpRequestException("503 Service Unavailable"));
@@ -195,7 +195,7 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var unknownRequestId = Guid.NewGuid();
 
         // Act
-        await service.HandleBookingJobConfirmed(unknownRequestId);
+        await service.HandleBookingJobConfirmed(unknownRequestId, Guid.NewGuid());
 
         // Assert
         await notificationMock.DidNotReceiveWithAnyArgs()
@@ -209,12 +209,12 @@ public class Task09_NotificationServiceTests : IntegrationTestBase
         var notificationMock = CreateNotificationMock();
         var service = CreateServiceWithNotifications(notificationMock);
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
         await service.CancelBooking(bookingId);
         notificationMock.ClearReceivedCalls();
 
         // Act: запоздалое повторное подтверждение — должно быть проигнорировано
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: раз статус не изменился — уведомление тоже не отправляется
         await notificationMock.DidNotReceiveWithAnyArgs()

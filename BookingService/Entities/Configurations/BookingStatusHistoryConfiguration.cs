@@ -7,7 +7,7 @@ public class BookingStatusHistoryConfiguration : IEntityTypeConfiguration<Bookin
 {
     public void Configure(EntityTypeBuilder<BookingStatusHistory> builder)
     {
-        builder.ToTable("booking_status_history");
+        builder.ToTable(DbTableNames.BookingStatusHistory);
         
         builder.HasKey(x => x.Id);
         

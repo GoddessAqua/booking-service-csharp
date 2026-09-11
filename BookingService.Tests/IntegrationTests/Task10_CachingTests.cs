@@ -147,7 +147,7 @@ public class Task10_CachingTests : IntegrationTestBase
         await service.GetStatistics();
 
         // Act
-        await service.HandleBookingJobConfirmed(catalogRequestId);
+        await service.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: разбивка по статусам обновилась
         var stats = await service.GetStatistics();

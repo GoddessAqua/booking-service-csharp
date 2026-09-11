@@ -26,6 +26,6 @@ public class CancelBookingErrorsHandler : IHandleMessages<CancelBookingJobByRequ
             message.EventId,                                                                                                                                                                                                   
             message.RequestId);                                                                                                                                                                                                   
                                                                                                                                                                                                                                     
-        await _bookingService.HandleCancellationError(message.RequestId); 
+        await _bookingService.HandleCancellationError(message.RequestId, message.EventId); 
     }
 }

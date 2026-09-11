@@ -33,7 +33,7 @@ public class Task03_RaceConditionsTests : IntegrationTestBase
         booking!.Status.Should().Be(BookingStatus.CancellationPending, "precondition");
 
         // Act: Catalog Service (с опозданием) присылает подтверждение создания
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: статус не должен измениться на Confirmed
         await Context.Entry(booking).ReloadAsync();
@@ -49,7 +49,7 @@ public class Task03_RaceConditionsTests : IntegrationTestBase
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
 
         // Act
-        await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        await BookingService.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 
         // Assert: базовая функциональность не сломана
         var booking = await Context.Bookings.FindAsync(bookingId);
