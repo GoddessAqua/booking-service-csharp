@@ -77,7 +77,7 @@ public class Task01_CompensatingTransactionTests : IntegrationTestBase
         booking!.Status.Should().Be(BookingStatus.CancellationPending, "precondition");
 
         // Act: симулируем ошибку DLQ от Catalog Service
-        await BookingService.HandleCancellationError(catalogRequestId);
+        await BookingService.HandleCancellationError(catalogRequestId, Guid.NewGuid());
 
         // Assert
         await Context.Entry(booking).ReloadAsync();
@@ -95,7 +95,7 @@ public class Task01_CompensatingTransactionTests : IntegrationTestBase
         var unknownRequestId = Guid.NewGuid();
 
         // Act & Assert: не должно бросать исключений
-        var act = async () => await BookingService.HandleCancellationError(unknownRequestId);
+        var act = async () => await BookingService.HandleCancellationError(unknownRequestId, Guid.NewGuid());
         await act.Should().NotThrowAsync(
             because: "Если бронирование не найдено, DLQ-событие должно быть проигнорировано без ошибки");
     }
@@ -108,7 +108,7 @@ public class Task01_CompensatingTransactionTests : IntegrationTestBase
         await ConfirmBookingAsync(catalogRequestId);
 
         // Act
-        await BookingService.HandleCancellationError(catalogRequestId);
+        await BookingService.HandleCancellationError(catalogRequestId, Guid.NewGuid());
 
         // Assert: статус не должен измениться
         var booking = await Context.Bookings.FindAsync(bookingId);

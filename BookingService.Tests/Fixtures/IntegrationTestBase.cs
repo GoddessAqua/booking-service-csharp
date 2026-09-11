@@ -102,5 +102,5 @@ public abstract class IntegrationTestBase : FeatureFixture, IAsyncLifetime
     /// Переводит бронирование в статус Confirmed через HandleBookingJobConfirmed
     /// </summary>
     protected async Task ConfirmBookingAsync(Guid catalogRequestId)
-        => await BookingService.HandleBookingJobConfirmed(catalogRequestId);
+        => await BookingService.HandleBookingJobConfirmed(catalogRequestId, Guid.NewGuid());
 }

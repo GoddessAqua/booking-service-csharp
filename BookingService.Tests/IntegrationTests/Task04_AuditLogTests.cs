@@ -125,7 +125,7 @@ public class Task04_AuditLogTests : IntegrationTestBase
         await BookingService.CancelBooking(bookingId);
 
         // Act: DLQ-ошибка откатывает обратно в Confirmed
-        await BookingService.HandleCancellationError(catalogRequestId);
+        await BookingService.HandleCancellationError(catalogRequestId, Guid.NewGuid());
 
         // Assert: вторая запись с status_to = Confirmed (первая — при создании+подтверждении)
         var rollbackEntryCount = await Context.Database.SqlQueryRaw<int>(
@@ -168,7 +168,7 @@ public class Task04_AuditLogTests : IntegrationTestBase
         var (bookingId, catalogRequestId) = await CreateBookingAsync();
         await ConfirmBookingAsync(catalogRequestId);
         await BookingService.CancelBooking(bookingId);
-        await BookingService.HandleCancellationError(catalogRequestId);
+        await BookingService.HandleCancellationError(catalogRequestId, Guid.NewGuid());
 
         // Act
         var history = await BookingService.GetBookingHistory(bookingId);

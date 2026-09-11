@@ -57,7 +57,7 @@ public class Task02_StatisticsTests : IntegrationTestBase
         // 1 в Confirmed
         await ConfirmBookingAsync(req1);
         // 1 в Cancelled (через deny)
-        await BookingService.HandleBookingJobDenied(req2);
+        await BookingService.HandleBookingJobDenied(req2, Guid.NewGuid());
 
         // Act
         var stats = await BookingService.GetStatistics();

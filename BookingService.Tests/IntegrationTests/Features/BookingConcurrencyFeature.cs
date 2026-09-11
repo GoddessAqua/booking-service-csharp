@@ -137,7 +137,7 @@ public class BookingConcurrencyFeature : FeatureFixtureBase
     private async Task When_confirmation_is_processed_by_the_second_process()
     {
         await _confirmationService!
-            .HandleBookingJobConfirmed(Booking.CatalogRequestId!.Value);
+            .HandleBookingJobConfirmed(Booking.CatalogRequestId!.Value, Guid.NewGuid());
     }
 
     #endregion
